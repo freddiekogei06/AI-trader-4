@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniTrade AI Hub</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #070d1e; color: #f1f5f9; margin: 0; padding: 16px; text-align: center; }
+    .card { background: #131d38; border-radius: 16px; padding: 20px; max-width: 440px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #1e293b; }
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #2d3748; font-size: 15px; }
+    input, select { background: #0b132b; color: #fff; }
+    button { background: #2563eb; color: white; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
+    button:active { transform: scale(0.98); background: #1d4ed8; }
+    .danger-btn { background: #ef4444; }
+    .danger-btn:active { background: #dc2626; }
+    
+    /* Login Lock Screen */
+    #lockScreen { padding: 40px 10px; }
+    .pin-input { font-size: 24px; letter-spacing: 6px; text-align: center; }
+    
+    /* Platform Grid & Tags */
+    .search-box { position: relative; margin-bottom: 12px; }
+    .platform-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 10px 0; }
+    .chip { background: #1e293b; padding: 8px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 1px solid #334155; }
+    .chip.active { background: #2563eb; border-color: #60a5fa; font-weight: bold; }
+    
+    /* Credential Box */
+    .cred-box { background: #0b132b; border-radius: 10px; padding: 14px; margin: 12px 0; text-align: left; font-size: 13px; border-left: 4px solid #38bdf8; }
+    
+    /* Scanner Area */
+    .file-upload { background: #0b132b; border: 2px dashed #3b82f6; padding: 16px; border-radius: 10px; cursor: pointer; margin: 12px 0; font-size: 14px; }
+    #preview { max-width: 100%; border-radius: 10px; margin-top: 10px; display: none; border: 1px solid #334155; }
+    
+    /* Signal Card */
+    #resultBox { margin-top: 15px; padding: 16px; border-radius: 12px; background: #0b132b; font-size: 15px; text-align: left; line-height: 1.8; white-space: pre-wrap; border-left: 5px solid #10b981; }
+    .status { color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <!-- ================= 1. PASSCODE LOCK SCREEN ================= -->
+  <div id="lockScreen" class="card">
+    <h2>🔒 Security Access</h2>
+    <p style="color:#94a3b8; font-size: 14px;">Enter passcode to access your AI trading terminal</p>
+    <input type="password" id="pinCode" class="pin-input" placeholder="••••" maxlength="6" inputmode="numeric">
+    <button onclick="checkPasscode()">Unlock App</button>
+    <div id="lockError" style="color:#f87171; margin-top:8px; font-size: 14px;"></div>
+  </div>
+
+  <!-- ================= 2. MAIN APP DASHBOARD ================= -->
+  <div id="appDashboard" class="card" style="display:none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <h3 style="margin:0;">⚡ OmniTrade AI</h3>
+      <button onclick="logout()" class="danger-btn" style="width: auto; padding: 6px 12px; font-size: 12px; margin:0;">Lock</button>
+    </div>
+
+    <!-- Platform Search -->
+    <div class="search-box">
+      <input type="text" id="platformSearch" placeholder="🔍 Search platform (MT5, Deriv, HFM...)" oninput="filterPlatforms()">
+    </div>
+
+    <div class="platform-chips" id="platformList">
+      <div class="chip active" onclick="selectPlatform('MetaTrader 5 (MT5)')">MetaTrader 5</div>
+      <div class="chip" onclick="selectPlatform('Deriv')">Deriv</div>
+      <div class="chip" onclick="selectPlatform('HFM (HotForex)')">HFM</div>
+      <div class="chip" onclick="selectPlatform('Exness')">Exness</div>
+      <div class="chip" onclick="selectPlatform('TradingView')">TradingView</div>
+      <div class="chip" onclick="selectPlatform('Forex.com')">Forex.com</div>
+    </div>
+
+    <!-- Active Platform Details & Credentials -->
+    <div class="cred-box">
+      <div style="font-weight:bold; margin-bottom:6px; color:#38bdf8;">
+        Active Platform: <span id="activePlatformName" style="color:#fff;">MetaTrader 5 (MT5)</span>
+      </div>
+      <div id="credFields">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- AI Key Input -->
+    <label style="font-size:12px; color:#94a3b8; display:block; text-align:left;">Google AI Studio Key:</label>
+    <input type="password" id="geminiKey" placeholder="Paste free Gemini key">
+
+    <!-- Chart Scanner -->
+    <div class="file-upload" onclick="document.getElementById('chartInput').click()">
+      <span id="uploadText">📸 Tap to Upload Chart Screenshot</span>
+      <input type="file" id="chartInput" accept="image/*" style="display:none;" onchange="previewImage()">
+    </div>
+
+    <img id="preview" alt="Chart Preview">
+
+    <button onclick="scanChart()">⚡ Scan & Get Direct Signal</button>
+
+    <div id="resultBox">Upload your chart screenshot from any platform and tap 'Get Direct Signal'.</div>
+  </div>
+
+  <script>
+    // ----------------- PASSCODE SYSTEM -----------------
+    const CORRECT_PIN = "2915";
+
+    function checkPasscode() {
+      const entered = document.getElementById('pinCode').value.trim();
+      const lockError = document.getElementById('lockError');
+      if (entered === CORRECT_PIN) {
+        document.getElementById('lockScreen').style.display = "none";
+        document.getElementById('appDashboard').style.display = "block";
+        sessionStorage.setItem('omni_auth', 'true');
+        loadSavedData();
+      } else {
+        lockError.innerText = "Incorrect passcode. Try again.";
+        document.getElementById('pinCode').value = "";
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem('omni_auth');
+      document.getElementById('appDashboard').style.display = "none";
+      document.getElementById('lockScreen').style.display = "block";
+      document.getElementById('pinCode').value = "";
+    }
+
+    // Auto unlock if session is active
+    if (sessionStorage.getItem('omni_auth') === 'true') {
+      document.getElementById('lockScreen').style.display = "none";
+      document.getElementById('appDashboard').style.display = "block";
+      window.onload = loadSavedData;
+    }
+
+    // ----------------- PLATFORMS & CREDENTIALS -----------------
+    let currentPlatform = "MetaTrader 5 (MT5)";
+
+    const platformConfigs = {
+      "MetaTrader 5 (MT5)": ["MT5 Account Number / Login ID", "Server (e.g. HFM-Live, Exness-Server)"],
+      "Deriv": ["Deriv API Token (Demo or Real)"],
+      "HFM (HotForex)": ["myHF Account ID", "Trading Account Password"],
+      "Exness": ["Exness Login ID", "Exness Server"],
+      "TradingView": ["TradingView Username / Webhook ID"],
+      "Forex.com": ["Forex.com Username", "Trading Account ID"]
+    };
+
+    function renderCredFields() {
+      document.getElementById('activePlatformName').innerText = currentPlatform;
+      const fields = platformConfigs[currentPlatform] || ["Account Login / ID", "Server / API Key"];
+      let html = "";
+      fields.forEach((field, i) => {
+        const savedVal = localStorage.getItem(`cred_${currentPlatform}_${i}`) || "";
+        html += `
+          <label style="color:#94a3b8; font-size:11px;">${field}:</label>
+          <input type="text" style="padding:8px; margin:4px 0 8px;" id="credInput_${i}" value="${savedVal}" placeholder="Enter ${field}" oninput="saveCred(${i})">
+        `;
+      });
+      document.getElementById('credFields').innerHTML = html;
+    }
+
+    function saveCred(index) {
+      const val = document.getElementById(`credInput_${index}`).value.trim();
+      localStorage.setItem(`cred_${currentPlatform}_${index}`, val);
+    }
+
+    function selectPlatform(name) {
+      currentPlatform = name;
+      document.querySelectorAll('.chip').forEach(el => {
+        el.classList.toggle('active', el.innerText.trim() === name || name.includes(el.innerText.trim()));
+      });
+      renderCredFields();
+    }
+
+    function filterPlatforms() {
+      const query = document.getElementById('platformSearch').value.toLowerCase();
+      document.querySelectorAll('.chip').forEach(chip => {
+        chip.style.display = chip.innerText.toLowerCase().includes(query) ? "inline-block" : "none";
+      });
+    }
+
+    function loadSavedData() {
+      renderCredFields();
+      const savedKey = localStorage.getItem('gemini_key') || "";
+      if (savedKey) document.getElementById('geminiKey').value = savedKey;
+
+      document.getElementById('geminiKey').addEventListener('input', (e) => {
+        localStorage.setItem('gemini_key', e.target.value.trim());
+      });
+    }
+
+    // ----------------- IMAGE & AI SCANNER -----------------
+    let base64Image = null;
+
+    function previewImage() {
+      const file = document.getElementById('chartInput').files[0];
+      if (!file) return;
+
+      document.getElementById('uploadText').innerText = "✓ Loaded: " + file.name;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const preview = document.getElementById('preview');
+        preview.src = e.target.result;
+        preview.style.display = "block";
+        base64Image = e.target.result.split(',')[1];
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function scanChart() {
+      const apiKey = document.getElementById('geminiKey').value.trim();
+      const resultBox = document.getElementById('resultBox');
+
+      if (!apiKey) {
+        alert("Please enter your free Google AI Studio key!");
+        return;
+      }
+      if (!base64Image) {
+        alert("Please upload a chart screenshot first!");
+        return;
+      }
+
+      resultBox.innerHTML = `<span class='status'>Analyzing ${currentPlatform} chart...</span>`;
+
+      // Ultra-concise prompt: no essays, direct action only
+      const promptText = `
+You are a direct trading execution bot for ${currentPlatform}.
+Do NOT write paragraphs, intros, or essays.
+Respond ONLY using this strict format:
+
+🎯 ACTION: [BUY / SELL / WAIT]
+⏱️ DURATION: [Exact time, e.g. 15-30 Minutes, 1 Hour, or 2 Candles]
+📍 ENTRY LEVEL: [Exact price to enter, or "Enter NOW at (Price)"]
+🛑 STOP LOSS (SL): [Exact price]
+🎯 TAKE PROFIT (TP): [Exact price]
+⏳ IF WAITING: [How long to wait in minutes AND what specific candle/price event triggers entry. If entering now, write "N/A - Enter Now"]
+💡 QUICK REASON: [Maximum 1 short sentence on the primary pattern or level]
+      `;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: promptText },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: base64Image
+                  }
+                }
+              ]
+            }]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          resultBox.innerHTML = `<span style="color:#f87171;">Error: ${data.error.message}</span>`;
+          return;
+        }
+
+        const signal = data.candidates[0].content.parts[0].text;
+        resultBox.innerText = signal;
+
+      } catch (err) {
+        resultBox.innerHTML = `<span style="color:#f87171;">Connection failed. Check your data connection.</span>`;
+      }
+    }
+  </script>
+</body>
+  </html>
